@@ -34,8 +34,8 @@ def send_telegram_alert(message):
     except Exception as e:
         print(f"[LOG] Error sending Telegram alert: {e}")
 
-def fetch_klines(symbol, interval, limit=100):
-    """Fetches real-time OHLCV candle data from Binance API."""
+def fetch_klines(symbol, interval, limit=500):
+    """Fetches historical OHLCV candle data from Binance API (Expanded Limit to 500 candles)."""
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
     try:
         response = requests.get(url, timeout=10)
@@ -54,14 +54,14 @@ def fetch_klines(symbol, interval, limit=100):
         return None
 
 # ------------------------------------------------------------------
-# MULTI-TIMEFRAME SCORING LOGIC
+# MULTI-TIMEFRAME SCORING LOGIC (UNRESTRICTED DYNAMIC SUPPORT)
 # ------------------------------------------------------------------
 def analyze_symbol(symbol):
     score = 0
     reasons = []
 
-    # 1. HTF (4H) Trend Bias via 200 EMA
-    df_4h = fetch_klines(symbol, interval="4h", limit=200)
+    # 1. HTF (4H) Trend Bias & Unrestricted Swing Low Check
+    df_4h = fetch_klines(symbol, interval="4h", limit=500)
     if df_4h is None or len(df_4h) < 200:
         return
     
@@ -69,9 +69,27 @@ def analyze_symbol(symbol):
     current_price = df_4h['close'].iloc[-1]
     ema_200 = df_4h['ema200'].iloc[-1]
 
+    # Scan ALL historical candles in dataset for any Pivot Swing Lows (No candle limits)
+    pivot_lows = []
+    for i in range(2, len(df_4h) - 2):
+        if df_4h['low'].iloc[i] < df_4h['low'].iloc[i-1] and \
+           df_4h['low'].iloc[i] < df_4h['low'].iloc[i-2] and \
+           df_4h['low'].iloc[i] < df_4h['low'].iloc[i+1] and \
+           df_4h['low'].iloc[i] < df_4h['low'].iloc[i+2]:
+            pivot_lows.append(df_4h['low'].iloc[i])
+
+    # Check if current price touches or is within 1.2% buffer zone of ANY historical 4H Pivot Low
+    is_at_4h_support = False
+    for p_low in pivot_lows:
+        if abs(current_price - p_low) / p_low <= 0.012: # Within 1.2% buffer
+            is_at_4h_support = True
+            break
+
     is_bullish_htf = current_price > ema_200
-    if is_bullish_htf:
+    if is_bullish_htf and is_at_4h_support:
         score += 1
+        reasons.append("4H Trend is Bullish & Testing Major Historical 4H Swing Low Support")
+    elif is_bullish_htf:
         reasons.append("4H Trend is Bullish (Price > 200 EMA)")
     else:
         reasons.append("4H Trend is Bearish (Price < 200 EMA)")
@@ -81,19 +99,28 @@ def analyze_symbol(symbol):
     if df_15m is None or len(df_15m) < 30:
         return
 
-    # A. RSI Calculation (14)
+    # A. Calculate RSI (14) & Divergence Logic
     delta = df_15m['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
     rs = gain / loss
     df_15m['rsi'] = 100 - (100 / (1 + rs))
 
-    rsi_current = df_15m['rsi'].iloc[-1]
+    price_low_curr = df_15m['low'].iloc[-1]
+    price_low_prev = df_15m['low'].iloc[-5:-1].min()
     
-    # RSI Oversold Check for Long
-    if is_bullish_htf and rsi_current < 35:
+    rsi_curr = df_15m['rsi'].iloc[-1]
+    rsi_prev_min = df_15m['rsi'].iloc[-5:-1].min()
+
+    has_regular_div = (price_low_curr < price_low_prev) and (rsi_curr > rsi_prev_min)
+    has_hidden_div = (price_low_curr > price_low_prev) and (rsi_curr < rsi_prev_min)
+
+    if has_regular_div:
         score += 1
-        reasons.append(f"15m RSI Oversold ({rsi_current:.1f})")
+        reasons.append("15m Regular Bullish Divergence (Reversal)")
+    elif has_hidden_div:
+        score += 1
+        reasons.append("15m Hidden Bullish Divergence (Continuation)")
 
     # B. Fair Value Gap (FVG) Detection
     c1_low = df_15m['low'].iloc[-1]
@@ -129,12 +156,12 @@ def analyze_symbol(symbol):
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     print("Multi-Timeframe Scoring Bot is operational...")
-    send_telegram_alert("🤖 *Bot Alert*: Scoring Bot updated! Scanning 20 High-Volatility Coins on Binance 24/7.")
+    send_telegram_alert("🤖 *Bot Alert*: Bot updated! Historical 4H Swing Support + RSI Divergence engine live.")
 
     while True:
         for symbol in SYMBOLS:
             analyze_symbol(symbol)
-            time.sleep(1)  # 1-second delay to comply with Binance rate limits
+            time.sleep(1)
         
         print("[LOG] Waiting 5 minutes for next candle scan...")
         time.sleep(300)
