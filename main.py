@@ -9,7 +9,13 @@ import pandas as pd
 TELEGRAM_BOT_TOKEN = "8570045911:AAF7YYb8sqTBICqIqSWAqa9r82dVGkr2g2Y"
 TELEGRAM_CHAT_ID = "5071622091"
 
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
+# 20 High-Volatility & Liquid Crypto Pairs
+SYMBOLS = [
+    "BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT",
+    "DOGEUSDT", "ADAUSDT", "AVAXUSDT", "LINKUSDT", "SUIUSDT",
+    "NEARUSDT", "APTUSDT", "FETUSDT", "RENDERUSDT", "PEPEUSDT",
+    "WIFUSDT", "ARBUSDT", "OPUSDT", "INJUSDT", "TIAUSDT"
+]
 
 def send_telegram_alert(message):
     """Sends high-probability trade alerts directly to Telegram."""
@@ -111,7 +117,7 @@ def analyze_symbol(symbol):
         msg = f"🚨 *HIGH-PROBABILITY SIGNAL DETECTED* 🚨\n\n"
         msg += f"📌 *Symbol*: `{symbol}`\n"
         msg += f"🎯 *Confluence Score*: `{score}/4`\n"
-        msg += f"💵 *Current Price*: `${current_price:.2f}`\n\n"
+        msg += f"💵 *Current Price*: `${current_price:.4f}`\n\n"
         msg += "*Confluence Reasons*:\n"
         for r in reasons:
             msg += f"• {r}\n"
@@ -123,12 +129,12 @@ def analyze_symbol(symbol):
 # ------------------------------------------------------------------
 if __name__ == "__main__":
     print("Multi-Timeframe Scoring Bot is operational...")
-    send_telegram_alert("🤖 *Bot Alert*: Multi-Timeframe Scoring Bot is ONLINE with NEW SECURE TOKEN!")
+    send_telegram_alert("🤖 *Bot Alert*: Scoring Bot updated! Scanning 20 High-Volatility Coins on Binance 24/7.")
 
     while True:
         for symbol in SYMBOLS:
             analyze_symbol(symbol)
-            time.sleep(2)
+            time.sleep(1)  # 1-second delay to comply with Binance rate limits
         
         print("[LOG] Waiting 5 minutes for next candle scan...")
         time.sleep(300)
